@@ -19,6 +19,7 @@ import {
   GenerateStoryResponseOutput,
 } from '@/ai/flows/generate-story-response';
 import {Loader2} from 'lucide-react';
+import { RateLimitExceededError } from '@/lib/errors'; // Import the custom error from the new file
 
 // Define the game state schema
 const GameStateSchema = z.object({
@@ -51,7 +52,7 @@ export default function Home() {
   const [playerInput, setPlayerInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const storyKeyCounter = useRef(0); // Keep as number for incrementing logic
+  const storyKeyCounter = useRef(0);
 
   const scrollAreaRef = useRef<HTMLDivElement>(null);
 
@@ -140,14 +141,19 @@ export default function Home() {
         // Keep the previous gameState (do not setGameState here)
       }
 
-    } catch (aiError: any) {
-      console.error('Error fetching story response:', aiError);
-      // Provide a more informative error message for common API issues
-      if (aiError instanceof Error && aiError.message.includes('503')) {
-         setError('The storyteller is currently overwhelmed. Please wait a moment and try again.');
+    } catch (err: any) { // Use a more general catch
+      console.error('Error during player action:', err);
+
+      // Check specifically for the rate limit error using instanceof
+      if (err instanceof RateLimitExceededError) {
+        setError(err.message); // Display the rate limit message
+        addStoryEntry('The storyteller is taking a quick break... ' + err.message, 'story');
+      } else if (err instanceof Error && (err.message.includes('503') || err.message.toLowerCase().includes('unavailable') || err.message.toLowerCase().includes('overloaded'))) {
+         setError('The storyteller is currently unavailable. Please wait a moment and try again.');
          addStoryEntry('The storyteller seems overwhelmed... Try again shortly.', 'story');
       } else {
-        setError('Failed to get response from the storyteller. Please try again.');
+        const displayError = err instanceof Error ? err.message : 'An unknown error occurred.';
+        setError(`Failed to get response from the storyteller: ${displayError}`);
         addStoryEntry('The storyteller seems lost in thought... Try again.', 'story');
       }
     } finally {
