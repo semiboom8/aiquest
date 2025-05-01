@@ -11,8 +11,6 @@
 
 import {ai} from '@/ai/ai-instance';
 import {z} from 'genkit';
-import { checkRateLimit } from '@/lib/rate-limiter'; // Import the rate check function
-import { RateLimitExceededError } from '@/lib/errors'; // Import the custom error class from the separate file
 
 const GenerateStoryResponseInputSchema = z.object({
   playerInput: z.string().describe('The player input in natural language.'),
@@ -36,20 +34,7 @@ export type GenerateStoryResponseOutput = z.infer<typeof GenerateStoryResponseOu
 export async function generateStoryResponse(
   input: GenerateStoryResponseInput
 ): Promise<GenerateStoryResponseOutput> {
-   // Check rate limit before processing
-  try {
-    await checkRateLimit(); // Call the rate limiter with await
-  } catch (error) {
-    if (error instanceof RateLimitExceededError) {
-      // Re-throw the specific error for the client to catch
-      throw error;
-    }
-    // Handle other potential errors during check if necessary
-    console.error("Unexpected error during rate limit check:", error);
-    throw new Error("An internal error occurred while checking request rate.");
-  }
-
-  // If rate limit is not exceeded, proceed with the flow
+  // Proceed directly with the flow, rate limiting removed
   return generateStoryResponseFlow(input);
 }
 
@@ -122,9 +107,6 @@ const generateStoryResponseFlow = ai.defineFlow<
         if (error.message && (error.message.includes('503') || error.message.toLowerCase().includes('overloaded'))) {
              throw new Error('The storyteller is currently unavailable (503). Please try again later.');
         }
-         if (error instanceof RateLimitExceededError) {
-           throw error; // Re-throw rate limit errors
-         }
         // Throw a generic error for other issues
         throw new Error('Failed to generate story response due to an internal error.');
     }

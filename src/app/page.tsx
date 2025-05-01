@@ -19,7 +19,6 @@ import {
   GenerateStoryResponseOutput,
 } from '@/ai/flows/generate-story-response';
 import {Loader2} from 'lucide-react';
-import { RateLimitExceededError } from '@/lib/errors'; // Import the custom error from the new file
 
 // Define the game state schema
 const GameStateSchema = z.object({
@@ -144,11 +143,8 @@ export default function Home() {
     } catch (err: any) { // Use a more general catch
       console.error('Error during player action:', err);
 
-      // Check specifically for the rate limit error using instanceof
-      if (err instanceof RateLimitExceededError) {
-        setError(err.message); // Display the rate limit message
-        addStoryEntry('The storyteller is taking a quick break... ' + err.message, 'story');
-      } else if (err instanceof Error && (err.message.includes('503') || err.message.toLowerCase().includes('unavailable') || err.message.toLowerCase().includes('overloaded'))) {
+      // Handle API errors (overload/unavailable)
+      if (err instanceof Error && (err.message.includes('503') || err.message.toLowerCase().includes('unavailable') || err.message.toLowerCase().includes('overloaded'))) {
          setError('The storyteller is currently unavailable. Please wait a moment and try again.');
          addStoryEntry('The storyteller seems overwhelmed... Try again shortly.', 'story');
       } else {
