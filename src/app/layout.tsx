@@ -16,7 +16,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="dark"> {/* Apply dark theme by default */}
+    <html lang="en" className="dark">
       <body className={`${inter.variable} font-sans antialiased bg-background text-foreground`}>
         {children}
         <Toaster /> {/* Add Toaster for potential future notifications */}
