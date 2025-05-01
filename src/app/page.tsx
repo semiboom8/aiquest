@@ -41,7 +41,7 @@ type GameState = z.infer<typeof GameStateSchema>;
 interface StoryEntry {
   type: 'story' | 'playerInput';
   text: string;
-  key: number;
+  key: string; // Use string keys for better uniqueness guarantee
 }
 
 export default function Home() {
@@ -51,27 +51,32 @@ export default function Home() {
   const [playerInput, setPlayerInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const storyKeyCounter = useRef(0); // Use ref for non-rendering counter
+  const storyKeyCounter = useRef(0); // Keep as number for incrementing logic
 
   const scrollAreaRef = useRef<HTMLDivElement>(null);
 
   // Function to add story entries with unique keys
   const addStoryEntry = useCallback((text: string, type: 'story' | 'playerInput' = 'story') => {
     storyKeyCounter.current += 1;
-    const newKey = storyKeyCounter.current;
+    // Generate a more robust unique key (timestamp + counter)
+    const newKey = `${Date.now()}-${storyKeyCounter.current}`;
     setStoryHistory(prev => [...prev, { type, text, key: newKey }]);
   }, []); // No dependencies needed for ref
 
   // Initialize game state on client mount
   useEffect(() => {
-    if (!gameState) {
-      const initialStats = {
-        strength: Math.floor(Math.random() * 10) + 5,
-        dexterity: Math.floor(Math.random() * 10) + 5,
-        intelligence: Math.floor(Math.random() * 10) + 5,
-        charisma: Math.floor(Math.random() * 10) + 5,
-        luck: Math.floor(Math.random() * 10) + 5,
-      };
+    // Check if gameState is null to avoid re-initializing after errors or updates
+    if (!gameState && storyHistory.length === 0) { // Initialize only if gameState is null AND history is empty
+        let initialStats: GameState['stats'] | null = null;
+        // Ensure random stats are only generated client-side
+        initialStats = {
+          strength: Math.floor(Math.random() * 10) + 5,
+          dexterity: Math.floor(Math.random() * 10) + 5,
+          intelligence: Math.floor(Math.random() * 10) + 5,
+          charisma: Math.floor(Math.random() * 10) + 5,
+          luck: Math.floor(Math.random() * 10) + 5,
+        };
+
       const initialGameState: GameState = {
         chapter: 1,
         hp: 100,
@@ -82,12 +87,10 @@ export default function Home() {
       };
       setGameState(initialGameState);
       // Add initial entry only once
-      if (storyHistory.length === 0) {
-           addStoryEntry('Welcome to TextQuest Adventures! You stand at the edge of a dark forest. What do you do?');
-      }
+      addStoryEntry('Welcome to TextQuest Adventures! You stand at the edge of a dark forest. What do you do?');
     }
-     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [gameState]); // Rerun if gameState changes (e.g., loading)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Run only once on mount
 
 
   // Scroll to bottom when story history updates
@@ -95,10 +98,13 @@ export default function Home() {
     if (scrollAreaRef.current) {
       const scrollViewport = scrollAreaRef.current.querySelector('[data-radix-scroll-area-viewport]');
       if(scrollViewport) {
-        scrollViewport.scrollTop = scrollViewport.scrollHeight;
+        // Use requestAnimationFrame for smoother scrolling after render
+        requestAnimationFrame(() => {
+          scrollViewport.scrollTop = scrollViewport.scrollHeight;
+        });
       }
     }
-  }, [storyHistory]);
+  }, [storyHistory]); // Trigger scroll on story history change
 
 
   const handlePlayerAction = useCallback(async (input: string) => {
@@ -113,7 +119,7 @@ export default function Home() {
     try {
       const aiInput: GenerateStoryResponseInput = {
         playerInput: input,
-        gameState: JSON.stringify(gameState),
+        gameState: JSON.stringify(gameState), // Send current state
       };
 
       const result: GenerateStoryResponseOutput = await generateStoryResponse(aiInput);
@@ -126,21 +132,28 @@ export default function Home() {
         // Assume the AI returns a JSON string representing the *entire* GameState object
         const parsedGameState = JSON.parse(result.updatedGameState);
         const validatedGameState = GameStateSchema.parse(parsedGameState);
-        setGameState(validatedGameState);
+        setGameState(validatedGameState); // Update state with the new validated state
       } catch (parseError) {
         console.error('Failed to parse or validate updated game state:', parseError);
         console.error('Received state string:', result.updatedGameState);
         setError('Error processing game state update. Continuing with previous state.');
-        // Keep the previous gameState
+        // Keep the previous gameState (do not setGameState here)
       }
 
-    } catch (aiError) {
+    } catch (aiError: any) {
       console.error('Error fetching story response:', aiError);
-      setError('Failed to get response from the storyteller. Please try again.');
-      addStoryEntry('The storyteller seems lost in thought... Try again.', 'story');
+      // Provide a more informative error message for common API issues
+      if (aiError instanceof Error && aiError.message.includes('503')) {
+         setError('The storyteller is currently overwhelmed. Please wait a moment and try again.');
+         addStoryEntry('The storyteller seems overwhelmed... Try again shortly.', 'story');
+      } else {
+        setError('Failed to get response from the storyteller. Please try again.');
+        addStoryEntry('The storyteller seems lost in thought... Try again.', 'story');
+      }
     } finally {
       setIsLoading(false);
     }
+    // Pass gameState as dependency to ensure the function has the latest state
   }, [gameState, isLoading, addStoryEntry]);
 
   const handleChoiceClick = (choice: string) => {
@@ -158,22 +171,32 @@ export default function Home() {
     handlePlayerAction(playerInput);
   };
 
+  // Conditional rendering for loading initial state
+  if (!gameState) {
+    return (
+      <div className="flex h-screen w-screen items-center justify-center p-4 bg-background text-foreground">
+        <Loader2 className="h-10 w-10 animate-spin text-primary" />
+        <p className="ml-4 text-lg">Loading your adventure...</p>
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-screen w-screen items-center justify-center p-4 bg-background text-foreground">
-      <Card className="w-full max-w-4xl h-full flex flex-col shadow-lg border-primary">
-        <CardHeader className="border-b border-primary">
+      <Card className="w-full max-w-4xl h-[95vh] max-h-[1000px] flex flex-col shadow-lg border-primary">
+        <CardHeader className="border-b border-primary flex-shrink-0">
           <CardTitle className="text-center text-2xl font-bold text-primary">TextQuest Adventures</CardTitle>
         </CardHeader>
-        <CardContent className="flex-grow p-0 overflow-hidden flex">
+        <CardContent className="flex-grow p-0 overflow-hidden flex min-h-0">
           {/* Main Game Area */}
-          <div className="flex-grow flex flex-col p-4">
+          <div className="flex-grow flex flex-col p-4 overflow-hidden">
             <ScrollArea className="flex-grow mb-4 pr-4" ref={scrollAreaRef}>
-              {storyHistory.map((entry, index) => ( // Use index temporarily if keys are problematic, but prefer unique stable keys
+              {storyHistory.map((entry) => (
                 <p
                   key={entry.key} // Using the unique key generated by addStoryEntry
                   className={`mb-2 ${entry.type === 'playerInput' ? 'text-accent italic pl-4 border-l-2 border-accent' : ''} fade-in`}
-                   // Stagger animation slightly based on key
-                   style={{ animationDelay: `${(entry.key % 20) * 0.05}s` }} // Modulo to keep delay reasonable
+                   // Stagger animation slightly based on a counter derived from key suffix
+                   style={{ animationDelay: `${(parseInt(entry.key.split('-')[1] || '0', 10) % 20) * 0.05}s` }} // Modulo to keep delay reasonable
                 >
                   {entry.type === 'playerInput' ? `> ${entry.text}` : entry.text}
                 </p>
@@ -190,9 +213,9 @@ export default function Home() {
                   <p className="font-semibold text-foreground">Your choices:</p>
                   {choices.map((choice, index) => (
                     <Button
-                      key={index} // Index is acceptable here as choices list is recreated each turn
+                      key={`${choice}-${index}`} // Combine choice and index for a more stable key if choices can repeat
                       variant="outline"
-                      className="w-full justify-start text-left hover:bg-accent/10 border-accent text-accent"
+                      className="w-full justify-start text-left hover:bg-accent/10 border-accent text-accent h-auto py-2 whitespace-normal" // Allow wrapping
                       onClick={() => handleChoiceClick(choice)}
                       disabled={isLoading}
                     >
@@ -202,7 +225,7 @@ export default function Home() {
                 </div>
               )}
             </ScrollArea>
-            <form onSubmit={handleInputSubmit} className="flex gap-2 mt-auto">
+            <form onSubmit={handleInputSubmit} className="flex gap-2 mt-auto flex-shrink-0">
               <Input
                 type="text"
                 placeholder="What do you do?"
@@ -210,6 +233,7 @@ export default function Home() {
                 onChange={handleInputChange}
                 className="flex-grow focus:ring-accent focus:border-accent"
                 disabled={isLoading}
+                aria-label="Player action input"
               />
               <Button type="submit" disabled={isLoading || !playerInput.trim()} className="bg-primary hover:bg-primary/90">
                 {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Send'}
@@ -218,8 +242,7 @@ export default function Home() {
           </div>
 
           {/* Stats Panel */}
-          {gameState && (
-            <div className="w-1/4 min-w-[200px] border-l border-primary p-4 flex flex-col bg-card overflow-y-auto">
+          <div className="w-1/3 max-w-[280px] min-w-[200px] border-l border-primary p-4 flex flex-col bg-card overflow-y-auto flex-shrink-0">
               <h3 className="text-lg font-semibold mb-4 text-primary border-b border-primary pb-2">Character</h3>
               <p>HP: <span className="font-bold text-accent">{gameState.hp}/100</span></p>
               <p>Location: <span className="font-bold text-accent">{gameState.location}</span></p>
@@ -247,15 +270,14 @@ export default function Home() {
               )}
 
               {/* Placeholder for Save/Load buttons - Functionality not implemented */}
-              <div className="mt-auto space-y-2 pt-4">
+              <div className="mt-auto space-y-2 pt-4 flex-shrink-0">
                 <Button variant="outline" className="w-full border-accent text-accent hover:bg-accent/10" disabled>Save Game (F5)</Button>
                 <Button variant="outline" className="w-full border-accent text-accent hover:bg-accent/10" disabled>Load Game (F9)</Button>
                 <Button variant="destructive" className="w-full" disabled>Exit Game (ESC)</Button>
               </div>
             </div>
-          )}
         </CardContent>
-         <CardFooter className="text-xs text-muted-foreground pt-2 justify-center border-t border-primary">
+         <CardFooter className="text-xs text-muted-foreground pt-2 justify-center border-t border-primary flex-shrink-0">
            Powered by Google Generative AI
          </CardFooter>
       </Card>
