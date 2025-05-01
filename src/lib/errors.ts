@@ -1,4 +1,8 @@
 /**
+ * @fileOverview Defines custom error classes used throughout the application.
+ */
+
+/**
  * Custom error class for rate limit exceeded errors.
  * This allows instanceof checks without exporting the class from a 'use server' file.
  */

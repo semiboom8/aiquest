@@ -1,7 +1,7 @@
 // src/lib/rate-limiter.ts
 'use server'; // Needs to run server-side
 
-import { RateLimitExceededError } from './errors'; // Import the custom error
+import { RateLimitExceededError } from './errors'; // Import the custom error from the separate file
 
 // WARNING: This is a very basic in-memory rate limiter suitable for demonstration
 // purposes or single-instance deployments ONLY. It does not scale across multiple
@@ -18,7 +18,7 @@ const TIME_WINDOW_MS = 15 * 1000; // ...within a 15-second window (globally)
  * If the limit is exceeded, it throws a RateLimitExceededError.
  * Otherwise, it records the current request timestamp.
  */
-export async function checkRateLimit() { // Make the function async
+export async function checkRateLimit() { // Ensure the function is async
   const now = Date.now();
 
   // Remove timestamps older than the time window

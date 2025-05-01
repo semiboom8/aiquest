@@ -12,7 +12,7 @@
 import {ai} from '@/ai/ai-instance';
 import {z} from 'genkit';
 import { checkRateLimit } from '@/lib/rate-limiter'; // Import the rate check function
-import { RateLimitExceededError } from '@/lib/errors'; // Import the custom error class
+import { RateLimitExceededError } from '@/lib/errors'; // Import the custom error class from the separate file
 
 const GenerateStoryResponseInputSchema = z.object({
   playerInput: z.string().describe('The player input in natural language.'),
